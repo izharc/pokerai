@@ -3,10 +3,9 @@ package com.example.pokerai
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,14 +17,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -35,13 +39,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.pokerai.game.Card
 import com.example.pokerai.game.Difficulty
 import com.example.pokerai.game.GameStage
+import com.example.pokerai.game.Player
 import com.example.pokerai.game.PokerGame
 
 class MainActivity : ComponentActivity() {
@@ -49,20 +56,32 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        enableEdgeToEdge()
-
         setContent {
-            MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF031B12)
-                ) {
-                    PokerApp()
-                }
-            }
+            PokerApp()
         }
     }
 }
+
+/* ============================================================
+   COLORS
+   ============================================================ */
+
+private val DarkBackground = Color(0xFF041A13)
+private val TableGreen = Color(0xFF08783F)
+private val TableGreenDark = Color(0xFF04592F)
+private val Gold = Color(0xFFFFC107)
+private val GoldDark = Color(0xFFB8860B)
+private val White = Color(0xFFFFFFFF)
+private val CardRed = Color(0xFFD32F2F)
+private val CardBlue = Color(0xFF172B4D)
+private val FoldRed = Color(0xFFD32F2F)
+private val CallGreen = Color(0xFF2E9B57)
+private val RaisePurple = Color(0xFF7045B8)
+private val AllInYellow = Color(0xFFFFC107)
+
+/* ============================================================
+   ROOT
+   ============================================================ */
 
 @Composable
 fun PokerApp() {
@@ -83,126 +102,130 @@ fun PokerApp() {
         mutableIntStateOf(0)
     }
 
-    /*
-     * SETUP
-     */
-    if (game == null) {
+    MaterialTheme {
 
-        SetupScreen(
-            numberOfPlayers = numberOfPlayers,
-            difficulty = difficulty,
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = DarkBackground
+        ) {
 
-            onPlayersChanged = {
-                numberOfPlayers = it
-            },
+            if (game == null) {
 
-            onDifficultyChanged = {
-                difficulty = it
-            },
-
-            onStart = {
-
-                val newGame = PokerGame(
+                SetupScreen(
                     numberOfPlayers = numberOfPlayers,
-                    startingChips = 1000,
-                    smallBlind = 10,
-                    bigBlind = 20,
-                    difficulty = difficulty
+                    difficulty = difficulty,
+
+                    onPlayersChanged = {
+                        numberOfPlayers = it
+                    },
+
+                    onDifficultyChanged = {
+                        difficulty = it
+                    },
+
+                    onStart = {
+
+                        val newGame = PokerGame(
+                            numberOfPlayers = numberOfPlayers,
+                            startingChips = 1000,
+                            smallBlind = 10,
+                            bigBlind = 20,
+                            difficulty = difficulty
+                        )
+
+                        newGame.startNewHand()
+
+                        newGame.processComputerTurns()
+
+                        game = newGame
+
+                        refreshKey++
+                    }
                 )
 
-                newGame.startNewHand()
+            } else {
 
-                /*
-                 * Let computers play until our turn.
-                 */
-                newGame.processComputerTurns()
+                key(refreshKey) {
 
-                game = newGame
+                    PokerTableScreen(
+                        game = game!!,
 
-                refreshKey++
-            }
-        )
+                        onFold = {
 
-    } else {
+                            game!!.playerFold(0)
 
-        /*
-         * Force the table to redraw after every action.
-         */
-        key(refreshKey) {
+                            game!!.processComputerTurns()
 
-            PokerTableScreen(
-                game = game!!,
+                            refreshKey++
+                        },
 
-                onFold = {
+                        onCheck = {
 
-                    game!!.playerFold(0)
-                    game!!.processComputerTurns()
+                            game!!.playerCheck(0)
 
-                    refreshKey++
-                },
+                            game!!.processComputerTurns()
 
-                onCheck = {
+                            refreshKey++
+                        },
 
-                    game!!.playerCheck(0)
-                    game!!.processComputerTurns()
+                        onCall = {
 
-                    refreshKey++
-                },
+                            game!!.playerCall(0)
 
-                onCall = {
+                            game!!.processComputerTurns()
 
-                    game!!.playerCall(0)
-                    game!!.processComputerTurns()
+                            refreshKey++
+                        },
 
-                    refreshKey++
-                },
+                        onRaise = {
 
-                onRaise = {
+                            game!!.playerRaise(
+                                playerId = 0,
+                                raiseAmount = 40
+                            )
 
-                    game!!.playerRaise(
-                        playerId = 0,
-                        raiseAmount = 40
+                            game!!.processComputerTurns()
+
+                            refreshKey++
+                        },
+
+                        onAllIn = {
+
+                            game!!.playerAllIn(0)
+
+                            game!!.processComputerTurns()
+
+                            refreshKey++
+                        },
+
+                        onNewHand = {
+
+                            game!!.startNewHand()
+
+                            game!!.processComputerTurns()
+
+                            refreshKey++
+                        },
+
+                        onNewGame = {
+
+                            game = null
+
+                            refreshKey++
+                        }
                     )
-
-                    game!!.processComputerTurns()
-
-                    refreshKey++
-                },
-
-                onAllIn = {
-
-                    game!!.playerAllIn(0)
-                    game!!.processComputerTurns()
-
-                    refreshKey++
-                },
-
-                onNewHand = {
-
-                    game!!.startNewHand()
-                    game!!.processComputerTurns()
-
-                    refreshKey++
-                },
-
-                onNewGame = {
-
-                    game = null
-
-                    refreshKey++
                 }
-            )
+            }
         }
     }
 }
-
 
 /* ============================================================
    SETUP SCREEN
    ============================================================ */
 
 @Composable
-fun SetupScreen(
+private fun SetupScreen(
     numberOfPlayers: Int,
     difficulty: Difficulty,
     onPlayersChanged: (Int) -> Unit,
@@ -213,220 +236,237 @@ fun SetupScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF031B12))
             .padding(24.dp),
+
         horizontalAlignment = Alignment.CenterHorizontally,
+
         verticalArrangement = Arrangement.Center
     ) {
 
         Text(
-            text = "♠  POKER  ♥",
-            color = Color.White,
+            text = "♠ POKER ♥",
+            color = Gold,
             fontSize = 34.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.ExtraBold
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(
+            modifier = Modifier.height(8.dp)
+        )
 
         Text(
             text = "TEXAS HOLD'EM",
-            color = Color(0xFFFFD54F),
-            fontSize = 15.sp,
+            color = White,
+            fontSize = 17.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Text(
-            text = "NUMBER OF PLAYERS",
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
+        Spacer(
+            modifier = Modifier.height(35.dp)
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
 
-        Row(
-            horizontalArrangement = Arrangement.Center
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF0A3024)
+            ),
+
+            shape = RoundedCornerShape(22.dp)
         ) {
 
-            for (players in 2..8) {
+            Column(
+                modifier = Modifier.padding(22.dp),
 
-                SelectionButton(
-                    text = players.toString(),
-                    selected = numberOfPlayers == players,
-                    onClick = {
-                        onPlayersChanged(players)
-                    }
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
+                Text(
+                    text = "NUMBER OF PLAYERS",
+                    color = Gold,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
                 )
 
-                Spacer(modifier = Modifier.width(5.dp))
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                Text(
+                    text = "$numberOfPlayers PLAYERS",
+                    color = White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+
+                Slider(
+                    value = numberOfPlayers.toFloat(),
+                    onValueChange = {
+
+                        onPlayersChanged(
+                            it.toInt().coerceIn(2, 8)
+                        )
+                    },
+
+                    valueRange = 2f..8f,
+                    steps = 5
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+
+                    horizontalArrangement =
+                        Arrangement.SpaceBetween
+                ) {
+
+                    Text(
+                        text = "2",
+                        color = White
+                    )
+
+                    Text(
+                        text = "8",
+                        color = White
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(35.dp))
+        Spacer(
+            modifier = Modifier.height(20.dp)
+        )
 
         Text(
             text = "AI DIFFICULTY",
-            color = Color.White,
-            fontSize = 16.sp,
+            color = Gold,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(
+            modifier = Modifier.height(10.dp)
+        )
 
         Row(
-            horizontalArrangement = Arrangement.Center
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
 
             DifficultyButton(
-                text = "EASY",
-                selected = difficulty == Difficulty.EASY,
-                onClick = {
-                    onDifficultyChanged(Difficulty.EASY)
-                }
-            )
-
-            Spacer(modifier = Modifier.width(7.dp))
-
-            DifficultyButton(
-                text = "MEDIUM",
-                selected = difficulty == Difficulty.MEDIUM,
-                onClick = {
-                    onDifficultyChanged(Difficulty.MEDIUM)
-                }
-            )
-
-            Spacer(modifier = Modifier.width(7.dp))
+                title = "EASY",
+                selected =
+                    difficulty == Difficulty.EASY
+            ) {
+                onDifficultyChanged(
+                    Difficulty.EASY
+                )
+            }
 
             DifficultyButton(
-                text = "HARD",
-                selected = difficulty == Difficulty.HARD,
-                onClick = {
-                    onDifficultyChanged(Difficulty.HARD)
-                }
-            )
+                title = "MEDIUM",
+                selected =
+                    difficulty == Difficulty.MEDIUM
+            ) {
+                onDifficultyChanged(
+                    Difficulty.MEDIUM
+                )
+            }
+
+            DifficultyButton(
+                title = "HARD",
+                selected =
+                    difficulty == Difficulty.HARD
+            ) {
+                onDifficultyChanged(
+                    Difficulty.HARD
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(42.dp))
+        Spacer(
+            modifier = Modifier.height(30.dp)
+        )
 
         Button(
             onClick = onStart,
+
             modifier = Modifier
                 .fillMaxWidth()
                 .height(58.dp),
-            shape = RoundedCornerShape(16.dp),
+
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFFFC107),
+                containerColor = Gold,
                 contentColor = Color.Black
-            )
+            ),
+
+            shape = RoundedCornerShape(16.dp)
         ) {
 
             Text(
                 text = "START GAME",
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.ExtraBold
             )
         }
     }
 }
-
-
-/* ============================================================
-   PLAYER BUTTON
-   ============================================================ */
-
-@Composable
-fun SelectionButton(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .background(
-                if (selected)
-                    Color(0xFFFFC107)
-                else
-                    Color(0xFF123C2B),
-                RoundedCornerShape(10.dp)
-            )
-            .border(
-                1.dp,
-                Color(0xFFFFC107),
-                RoundedCornerShape(10.dp)
-            )
-            .clickable {
-                onClick()
-            },
-        contentAlignment = Alignment.Center
-    ) {
-
-        Text(
-            text = text,
-            color = if (selected)
-                Color.Black
-            else
-                Color.White,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
 
 /* ============================================================
    DIFFICULTY BUTTON
    ============================================================ */
 
 @Composable
-fun DifficultyButton(
-    text: String,
+private fun DifficultyButton(
+    title: String,
     selected: Boolean,
     onClick: () -> Unit
 ) {
 
-    Box(
-        modifier = Modifier
-            .width(95.dp)
-            .height(44.dp)
-            .background(
-                if (selected)
-                    Color(0xFFFFC107)
-                else
-                    Color(0xFF123C2B),
-                RoundedCornerShape(10.dp)
-            )
-            .border(
-                1.dp,
-                Color(0xFFFFC107),
-                RoundedCornerShape(10.dp)
-            )
-            .clickable {
-                onClick()
-            },
-        contentAlignment = Alignment.Center
-    ) {
+    if (selected) {
 
-        Text(
-            text = text,
-            color = if (selected)
-                Color.Black
-            else
-                Color.White,
-            fontWeight = FontWeight.Bold
-        )
+        Button(
+            onClick = onClick,
+
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Gold,
+                contentColor = Color.Black
+            ),
+
+            shape = RoundedCornerShape(12.dp)
+        ) {
+
+            Text(
+                text = title,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+    } else {
+
+        OutlinedButton(
+            onClick = onClick,
+
+            border = BorderStroke(
+                1.dp,
+                GoldDark
+            ),
+
+            shape = RoundedCornerShape(12.dp)
+        ) {
+
+            Text(
+                text = title,
+                color = White,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
-
 /* ============================================================
-   POKER TABLE
+   MAIN POKER TABLE
    ============================================================ */
 
 @Composable
-fun PokerTableScreen(
+private fun PokerTableScreen(
     game: PokerGame,
 
     onFold: () -> Unit,
@@ -439,516 +479,197 @@ fun PokerTableScreen(
     onNewGame: () -> Unit
 ) {
 
-    val human = game.players[0]
-
-    val humanTurn =
-        game.currentPlayerIndex == 0 &&
-                game.stage != GameStage.SHOWDOWN &&
-                game.stage != GameStage.FINISHED &&
-                !human.folded &&
-                !human.allIn
+    val human = game.players.firstOrNull()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF031B12))
-            .padding(10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(DarkBackground)
+            .padding(
+                start = 8.dp,
+                end = 8.dp,
+                top = 8.dp,
+                bottom = 6.dp
+            )
     ) {
 
-        /* HEADER */
+        /* ====================================================
+           HEADER
+           ==================================================== */
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+
+            horizontalArrangement =
+                Arrangement.SpaceBetween,
+
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             Text(
                 text = "♠ POKER",
-                color = Color.White,
+                color = White,
                 fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.ExtraBold
             )
 
-            Text(
-                text = difficultyText(game.difficulty),
-                color = Color(0xFFFFD54F),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
+            StageBadge(
+                stage = game.stage
             )
         }
 
-        Text(
-            text = "PLAYERS: ${game.players.size}",
-            color = Color.LightGray,
-            fontSize = 10.sp
+        Spacer(
+            modifier = Modifier.height(5.dp)
         )
 
-        Spacer(modifier = Modifier.height(5.dp))
+        /* ====================================================
+           TABLE
+           ==================================================== */
 
-        /*
-         * TURN STATUS
-         */
-
-        Text(
-            text = when {
-
-                humanTurn ->
-                    "YOUR TURN"
-
-                game.stage == GameStage.SHOWDOWN ->
-                    "SHOWDOWN"
-
-                game.stage == GameStage.FINISHED ->
-                    "HAND FINISHED"
-
-                else ->
-                    "COMPUTER THINKING..."
-            },
-            color = when {
-
-                humanTurn ->
-                    Color(0xFFFFD54F)
-
-                else ->
-                    Color.LightGray
-            },
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-
-        /* COMPUTER PLAYERS */
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-
-            game.players
-                .filter { it.id != 0 }
-                .forEach { player ->
-
-                    PlayerMiniCard(
-                        name = player.name,
-                        chips = player.chips,
-                        current =
-                            game.currentPlayerIndex == player.id &&
-                                    game.stage != GameStage.SHOWDOWN &&
-                                    game.stage != GameStage.FINISHED
-                    )
-                }
-        }
-
-        Spacer(modifier = Modifier.height(7.dp))
-
-
-        /* TABLE */
-
-        Card(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(270.dp),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF087A3E)
-            )
+                .weight(1f)
+                .clip(
+                    RoundedCornerShape(34.dp)
+                )
+                .background(TableGreen)
+                .border(
+                    width = 4.dp,
+                    color = GoldDark,
+                    shape = RoundedCornerShape(34.dp)
+                )
+                .padding(10.dp)
         ) {
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                modifier = Modifier.fillMaxSize(),
+
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
 
-                Text(
-                    text = "POT: ${game.pot}",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                /* ============================================
+                   AI PLAYERS
+                   ============================================ */
+
+                AiPlayersRow(
+                    players = game.players.drop(1),
+                    currentPlayerIndex =
+                        game.currentPlayerIndex
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(
+                    modifier = Modifier.height(7.dp)
+                )
 
-                Row(
-                    horizontalArrangement = Arrangement.Center
+                /* ============================================
+                   POT
+                   ============================================ */
+
+                PotDisplay(
+                    pot = game.pot
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                /* ============================================
+                   COMMUNITY CARDS
+                   ============================================ */
+
+                CommunityCards(
+                    cards = game.communityCards,
+                    stage = game.stage
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                /* ============================================
+                   RESULT
+                   ============================================ */
+
+                if (
+                    game.stage == GameStage.SHOWDOWN ||
+                    game.stage == GameStage.FINISHED
                 ) {
 
-                    for (i in 0 until 5) {
-
-                        if (i < game.communityCards.size) {
-
-                            PokerCard(
-                                text = game.communityCards[i].displayName()
-                            )
-
-                        } else {
-
-                            PokerCard(
-                                text = "?"
-                            )
-                        }
-
-                        if (i < 4) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-                    }
+                    ResultBox(
+                        text = game.lastResult
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = stageText(game.stage),
-                    color = Color(0xFFFFD54F),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
+                Spacer(
+                    modifier = Modifier.weight(1f)
                 )
 
-                if (game.lastResult.isNotBlank()) {
+                /* ============================================
+                   YOUR AREA
+                   ============================================ */
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                if (human != null) {
 
-                    Text(
-                        text = game.lastResult,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
+                    PlayerArea(
+                        player = human,
+
+                        isTurn =
+                            game.currentPlayerIndex == 0 &&
+                                    game.stage !=
+                                    GameStage.SHOWDOWN &&
+                                    game.stage !=
+                                    GameStage.FINISHED
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(7.dp))
-
-
-        /* YOUR CARDS */
-
-        Text(
-            text = "YOUR CARDS",
-            color = Color.White,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
+        Spacer(
+            modifier = Modifier.height(7.dp)
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row(
-            horizontalArrangement = Arrangement.Center
-        ) {
-
-            human.hand.forEachIndexed { index, card ->
-
-                PokerCard(
-                    text = card.displayName()
-                )
-
-                if (index == 0) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(3.dp))
-
-        Text(
-            text = "Your chips: ${human.chips}",
-            color = Color.White,
-            fontSize = 12.sp
-        )
-
-        Spacer(modifier = Modifier.height(7.dp))
-
-
-        /* ACTION BUTTONS */
+        /* ====================================================
+           ACTION AREA
+           ==================================================== */
 
         if (
             game.stage != GameStage.SHOWDOWN &&
             game.stage != GameStage.FINISHED
         ) {
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
+            ActionPanel(
+                game = game,
 
-                ActionButton(
-                    text = "FOLD",
-                    enabled = humanTurn,
-                    onClick = onFold
-                )
-
-                ActionButton(
-                    text = "CHECK",
-                    enabled =
-                        humanTurn &&
-                                game.canCheck(0),
-                    onClick = onCheck
-                )
-
-                ActionButton(
-                    text = "CALL",
-                    enabled =
-                        humanTurn &&
-                                !game.canCheck(0),
-                    onClick = onCall
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-
-                ActionButton(
-                    text = "RAISE +40",
-                    enabled = humanTurn,
-                    onClick = onRaise
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                ActionButton(
-                    text = "ALL IN",
-                    enabled =
-                        humanTurn &&
-                                human.chips > 0,
-                    onClick = onAllIn
-                )
-            }
+                onFold = onFold,
+                onCheck = onCheck,
+                onCall = onCall,
+                onRaise = onRaise,
+                onAllIn = onAllIn
+            )
 
         } else {
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-
-                Button(
-                    onClick = onNewHand,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFFC107),
-                        contentColor = Color.Black
-                    )
-                ) {
-
-                    Text(
-                        text = "NEW HAND",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Button(
-                    onClick = onNewGame,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF444444),
-                        contentColor = Color.White
-                    )
-                ) {
-
-                    Text(
-                        text = "NEW GAME",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-    }
-}
-
-
-/* ============================================================
-   COMPUTER PLAYER
-   ============================================================ */
-
-@Composable
-fun PlayerMiniCard(
-    name: String,
-    chips: Int,
-    current: Boolean
-) {
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        Text(
-            text = name,
-            color = if (current)
-                Color(0xFFFFD54F)
-            else
-                Color.White,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Row {
-
-            PokerBackCard()
-
-            Spacer(modifier = Modifier.width(2.dp))
-
-            PokerBackCard()
-        }
-
-        Text(
-            text = "$chips",
-            color = Color.LightGray,
-            fontSize = 8.sp
-        )
-    }
-}
-
-
-/* ============================================================
-   CARD
-   ============================================================ */
-
-@Composable
-fun PokerCard(
-    text: String
-) {
-
-    val red =
-        text.contains("♥") ||
-                text.contains("♦")
-
-    Box(
-        modifier = Modifier
-            .width(43.dp)
-            .height(60.dp)
-            .background(
-                Color.White,
-                RoundedCornerShape(6.dp)
+            EndGamePanel(
+                onNewHand = onNewHand,
+                onNewGame = onNewGame
             )
-            .border(
-                1.dp,
-                Color.DarkGray,
-                RoundedCornerShape(6.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-
-        Text(
-            text = text,
-            color = if (red)
-                Color.Red
-            else
-                Color.Black,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold
-        )
+        }
     }
 }
 
-
 /* ============================================================
-   CARD BACK
+   STAGE BADGE
    ============================================================ */
 
 @Composable
-fun PokerBackCard() {
-
-    Box(
-        modifier = Modifier
-            .width(24.dp)
-            .height(34.dp)
-            .background(
-                Color(0xFF1D2D50),
-                RoundedCornerShape(4.dp)
-            )
-            .border(
-                1.dp,
-                Color.White,
-                RoundedCornerShape(4.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-
-        Text(
-            text = "♠",
-            color = Color.White,
-            fontSize = 10.sp
-        )
-    }
-}
-
-
-/* ============================================================
-   ACTION BUTTON
-   ============================================================ */
-
-@Composable
-fun ActionButton(
-    text: String,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.height(40.dp),
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = when {
-
-                text == "FOLD" ->
-                    Color(0xFFD32F2F)
-
-                text == "ALL IN" ->
-                    Color(0xFFFFC107)
-
-                text.startsWith("RAISE") ->
-                    Color(0xFF6A45B8)
-
-                else ->
-                    Color(0xFF303030)
-            },
-
-            contentColor =
-                if (text == "ALL IN")
-                    Color.Black
-                else
-                    Color.White,
-
-            disabledContainerColor =
-                Color(0xFF202020),
-
-            disabledContentColor =
-                Color(0xFF777777)
-        )
-    ) {
-
-        Text(
-            text = text,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-
-/* ============================================================
-   TEXT HELPERS
-   ============================================================ */
-
-fun stageText(
+private fun StageBadge(
     stage: GameStage
-): String {
+) {
 
-    return when (stage) {
+    val text = when (stage) {
 
         GameStage.WAITING ->
             "WAITING"
@@ -971,22 +692,763 @@ fun stageText(
         GameStage.FINISHED ->
             "FINISHED"
     }
+
+    Box(
+        modifier = Modifier
+            .clip(
+                RoundedCornerShape(10.dp)
+            )
+            .background(
+                Color.Black.copy(alpha = 0.45f)
+            )
+            .padding(
+                horizontal = 10.dp,
+                vertical = 5.dp
+            )
+    ) {
+
+        Text(
+            text = text,
+            color = Gold,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
 }
 
+/* ============================================================
+   AI PLAYERS
+   ============================================================ */
 
-fun difficultyText(
-    difficulty: Difficulty
-): String {
+@Composable
+private fun AiPlayersRow(
+    players: List<Player>,
+    currentPlayerIndex: Int
+) {
 
-    return when (difficulty) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
 
-        Difficulty.EASY ->
-            "EASY"
+        horizontalArrangement =
+            Arrangement.spacedBy(7.dp),
 
-        Difficulty.MEDIUM ->
-            "MEDIUM"
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
 
-        Difficulty.HARD ->
-            "HARD"
+        items(
+            items = players,
+            key = {
+                it.id
+            }
+        ) { player ->
+
+            SmallPlayerCard(
+                player = player,
+
+                isTurn =
+                    currentPlayerIndex == player.id
+            )
+        }
+    }
+}
+
+/* ============================================================
+   SMALL PLAYER CARD
+   ============================================================ */
+
+@Composable
+private fun SmallPlayerCard(
+    player: Player,
+    isTurn: Boolean
+) {
+
+    val borderColor =
+        if (isTurn)
+            Gold
+        else
+            Color.White.copy(alpha = 0.25f)
+
+    val background =
+        if (isTurn)
+            Color(0xFF155F39)
+        else
+            Color.Black.copy(alpha = 0.28f)
+
+    Card(
+        modifier = Modifier
+            .width(105.dp)
+            .border(
+                width = if (isTurn) 2.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(13.dp)
+            ),
+
+        colors = CardDefaults.cardColors(
+            containerColor = background
+        ),
+
+        shape = RoundedCornerShape(13.dp)
+    ) {
+
+        Column(
+            modifier = Modifier.padding(6.dp),
+
+            horizontalAlignment =
+                Alignment.CenterHorizontally
+        ) {
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                if (isTurn) {
+
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(Gold)
+                    )
+
+                    Spacer(
+                        modifier = Modifier.width(4.dp)
+                    )
+                }
+
+                Text(
+                    text = player.name,
+                    color = White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+
+            Text(
+                text = "${player.chips} chips",
+                color = Gold,
+                fontSize = 9.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(3.dp)
+            )
+
+            Row(
+                horizontalArrangement =
+                    Arrangement.spacedBy(2.dp)
+            ) {
+
+                CardBack(
+                    small = true
+                )
+
+                CardBack(
+                    small = true
+                )
+            }
+
+            if (player.currentBet > 0) {
+
+                Text(
+                    text = "BET ${player.currentBet}",
+                    color = White,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (player.folded) {
+
+                Text(
+                    text = "FOLDED",
+                    color = Color(0xFFFF7777),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (player.allIn) {
+
+                Text(
+                    text = "ALL IN",
+                    color = Gold,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+/* ============================================================
+   POT
+   ============================================================ */
+
+@Composable
+private fun PotDisplay(
+    pot: Int
+) {
+
+    Column(
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+
+        Text(
+            text = "POT",
+            color = White.copy(alpha = 0.75f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            text = "$pot",
+            color = Gold,
+            fontSize = 25.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
+}
+
+/* ============================================================
+   COMMUNITY CARDS
+   ============================================================ */
+
+@Composable
+private fun CommunityCards(
+    cards: List<Card>,
+    stage: GameStage
+) {
+
+    Column(
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+
+        Row(
+            horizontalArrangement =
+                Arrangement.spacedBy(5.dp)
+        ) {
+
+            repeat(5) { index ->
+
+                if (index < cards.size) {
+
+                    PokerCard(
+                        card = cards[index]
+                    )
+
+                } else {
+
+                    EmptyCard()
+                }
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(5.dp)
+        )
+
+        Text(
+            text = when (stage) {
+
+                GameStage.PRE_FLOP ->
+                    "PRE-FLOP"
+
+                GameStage.FLOP ->
+                    "FLOP"
+
+                GameStage.TURN ->
+                    "TURN"
+
+                GameStage.RIVER ->
+                    "RIVER"
+
+                GameStage.SHOWDOWN ->
+                    "SHOWDOWN"
+
+                GameStage.FINISHED ->
+                    "FINISHED"
+
+                else ->
+                    ""
+            },
+
+            color = Gold,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
+}
+
+/* ============================================================
+   EMPTY CARD
+   ============================================================ */
+
+@Composable
+private fun EmptyCard() {
+
+    Box(
+        modifier = Modifier
+            .width(43.dp)
+            .height(61.dp)
+            .clip(
+                RoundedCornerShape(5.dp)
+            )
+            .background(
+                CardBlue
+            )
+            .border(
+                1.dp,
+                White.copy(alpha = 0.55f),
+                RoundedCornerShape(5.dp)
+            ),
+
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Text(
+            text = "?",
+            color = White.copy(alpha = 0.75f),
+            fontSize = 19.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+/* ============================================================
+   POKER CARD
+   ============================================================ */
+
+@Composable
+private fun PokerCard(
+    card: Card
+) {
+
+    val textColor =
+        if (card.suit.isRed)
+            CardRed
+        else
+            Color.Black
+
+    Box(
+        modifier = Modifier
+            .width(43.dp)
+            .height(61.dp)
+            .clip(
+                RoundedCornerShape(5.dp)
+            )
+            .background(Color.White)
+            .border(
+                1.dp,
+                Color.Black.copy(alpha = 0.25f),
+                RoundedCornerShape(5.dp)
+            )
+            .padding(3.dp),
+
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Text(
+            text = card.displayName(),
+            color = textColor,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
+}
+
+/* ============================================================
+   CARD BACK
+   ============================================================ */
+
+@Composable
+private fun CardBack(
+    small: Boolean = false
+) {
+
+    val width =
+        if (small) 27.dp else 43.dp
+
+    val height =
+        if (small) 38.dp else 61.dp
+
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(height)
+            .clip(
+                RoundedCornerShape(4.dp)
+            )
+            .background(
+                CardBlue
+            )
+            .border(
+                1.dp,
+                White.copy(alpha = 0.6f),
+                RoundedCornerShape(4.dp)
+            ),
+
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Text(
+            text = "♠",
+            color = White.copy(alpha = 0.7f),
+            fontSize =
+                if (small) 10.sp else 16.sp
+        )
+    }
+}
+
+/* ============================================================
+   YOUR PLAYER AREA
+   ============================================================ */
+
+@Composable
+private fun PlayerArea(
+    player: Player,
+    isTurn: Boolean
+) {
+
+    Column(
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+
+        Row(
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            if (isTurn) {
+
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(Gold)
+                )
+
+                Spacer(
+                    modifier = Modifier.width(6.dp)
+                )
+
+                Text(
+                    text = "YOUR TURN",
+                    color = Gold,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            } else {
+
+                Text(
+                    text = "YOUR CARDS",
+                    color = White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(6.dp)
+        )
+
+        Row(
+            horizontalArrangement =
+                Arrangement.spacedBy(7.dp)
+        ) {
+
+            player.hand.getOrNull(0)?.let {
+
+                PokerCard(
+                    card = it
+                )
+            }
+
+            player.hand.getOrNull(1)?.let {
+
+                PokerCard(
+                    card = it
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(4.dp)
+        )
+
+        Row(
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
+        ) {
+
+            Text(
+                text = "CHIPS ${player.chips}",
+                color = White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            if (player.currentBet > 0) {
+
+                Text(
+                    text = "BET ${player.currentBet}",
+                    color = Gold,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+/* ============================================================
+   RESULT BOX
+   ============================================================ */
+
+@Composable
+private fun ResultBox(
+    text: String
+) {
+
+    if (text.isBlank()) {
+        return
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(
+                RoundedCornerShape(12.dp)
+            )
+            .background(
+                Color.Black.copy(alpha = 0.55f)
+            )
+            .border(
+                1.dp,
+                Gold.copy(alpha = 0.65f),
+                RoundedCornerShape(12.dp)
+            )
+            .padding(
+                horizontal = 12.dp,
+                vertical = 8.dp
+            ),
+
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Text(
+            text = text,
+            color = White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/* ============================================================
+   ACTION PANEL
+   ============================================================ */
+
+@Composable
+private fun ActionPanel(
+    game: PokerGame,
+
+    onFold: () -> Unit,
+    onCheck: () -> Unit,
+    onCall: () -> Unit,
+    onRaise: () -> Unit,
+    onAllIn: () -> Unit
+) {
+
+    val humanTurn =
+        game.currentPlayerIndex == 0
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
+        ) {
+
+            ActionButton(
+                title = "FOLD",
+                modifier = Modifier.weight(1f),
+                background = FoldRed,
+                enabled = humanTurn,
+                onClick = onFold
+            )
+
+            if (game.canCheck(0)) {
+
+                ActionButton(
+                    title = "CHECK",
+                    modifier = Modifier.weight(1f),
+                    background = CallGreen,
+                    enabled = humanTurn,
+                    onClick = onCheck
+                )
+
+            } else {
+
+                ActionButton(
+                    title = "CALL",
+                    modifier = Modifier.weight(1f),
+                    background = CallGreen,
+                    enabled = humanTurn,
+                    onClick = onCall
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(7.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
+        ) {
+
+            ActionButton(
+                title = "RAISE +40",
+                modifier = Modifier.weight(1f),
+                background = RaisePurple,
+                enabled = humanTurn,
+                onClick = onRaise
+            )
+
+            ActionButton(
+                title = "ALL IN",
+                modifier = Modifier.weight(1f),
+                background = AllInYellow,
+                contentColor = Color.Black,
+                enabled = humanTurn,
+                onClick = onAllIn
+            )
+        }
+    }
+}
+
+/* ============================================================
+   ACTION BUTTON
+   ============================================================ */
+
+@Composable
+private fun ActionButton(
+    title: String,
+    modifier: Modifier,
+    background: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    contentColor: Color = White
+) {
+
+    Button(
+        onClick = onClick,
+
+        modifier = modifier
+            .height(46.dp),
+
+        enabled = enabled,
+
+        colors = ButtonDefaults.buttonColors(
+            containerColor = background,
+            contentColor = contentColor,
+            disabledContainerColor =
+                Color.Gray.copy(alpha = 0.35f),
+            disabledContentColor =
+                White.copy(alpha = 0.4f)
+        ),
+
+        shape = RoundedCornerShape(12.dp)
+    ) {
+
+        Text(
+            text = title,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
+}
+
+/* ============================================================
+   END GAME PANEL
+   ============================================================ */
+
+@Composable
+private fun EndGamePanel(
+    onNewHand: () -> Unit,
+    onNewGame: () -> Unit
+) {
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+
+        horizontalArrangement =
+            Arrangement.spacedBy(8.dp)
+    ) {
+
+        Button(
+            onClick = onNewHand,
+
+            modifier = Modifier
+                .weight(1f)
+                .height(50.dp),
+
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Gold,
+                contentColor = Color.Black
+            ),
+
+            shape = RoundedCornerShape(14.dp)
+        ) {
+
+            Text(
+                text = "NEW HAND",
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+
+        OutlinedButton(
+            onClick = onNewGame,
+
+            modifier = Modifier
+                .weight(1f)
+                .height(50.dp),
+
+            border = BorderStroke(
+                1.dp,
+                Gold
+            ),
+
+            shape = RoundedCornerShape(14.dp)
+        ) {
+
+            Text(
+                text = "NEW GAME",
+                color = White,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
     }
 }

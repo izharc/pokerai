@@ -12,7 +12,6 @@ class PokerGame(
 ) {
 
     val players = mutableListOf<Player>()
-
     val communityCards = mutableListOf<Card>()
 
     private var deck = Deck()
@@ -29,16 +28,26 @@ class PokerGame(
     var lastResult: String = ""
         private set
 
-    private val actedPlayers =
-        mutableSetOf<Int>()
+    // ============================================================
+    // DEALER / BLINDS
+    // ============================================================
 
+    var dealerIndex: Int = -1
+        private set
 
-    /* ============================================================
-       CREATE PLAYERS
-       ============================================================ */
+    var smallBlindIndex: Int = -1
+        private set
+
+    var bigBlindIndex: Int = -1
+        private set
+
+    private val actedPlayers = mutableSetOf<Int>()
+
+    // ============================================================
+    // CREATE PLAYERS
+    // ============================================================
 
     init {
-
         require(numberOfPlayers in 2..8)
 
         for (i in 0 until numberOfPlayers) {
@@ -46,21 +55,20 @@ class PokerGame(
             players.add(
                 Player(
                     id = i,
-                    name =
-                        if (i == 0)
-                            "YOU"
-                        else
-                            "Computer $i",
+                    name = if (i == 0) {
+                        "YOU"
+                    } else {
+                        "Computer $i"
+                    },
                     chips = startingChips
                 )
             )
         }
     }
 
-
-    /* ============================================================
-       START HAND
-       ============================================================ */
+    // ============================================================
+    // START NEW HAND
+    // ============================================================
 
     fun startNewHand() {
 
@@ -76,20 +84,117 @@ class PokerGame(
 
         stage = GameStage.PRE_FLOP
 
+        // Reset all players.
         players.forEach {
             it.resetForNewHand()
         }
 
+        // Players with no chips cannot participate.
+        players.forEach {
+            if (it.chips <= 0) {
+                it.folded = true
+            }
+        }
+
+        val eligiblePlayers =
+            players.filter {
+                it.chips > 0
+            }
+
+        // Game is over if fewer than two players remain.
+        if (eligiblePlayers.size < 2) {
+
+            stage = GameStage.FINISHED
+
+            lastResult =
+                eligiblePlayers.firstOrNull()?.let {
+                    "${it.name} wins the game!"
+                } ?: "No players remaining."
+
+            currentPlayerIndex =
+                eligiblePlayers.firstOrNull()?.id ?: 0
+
+            return
+        }
+
+        // ========================================================
+        // DEALER ROTATION
+        // ========================================================
 
         /*
-         * Deal two cards.
+         * First hand:
+         * Player 0 is the dealer.
+         *
+         * Every following hand:
+         * Move dealer clockwise.
          */
+        dealerIndex =
+            if (dealerIndex < 0) {
+
+                eligiblePlayers.first().id
+
+            } else {
+
+                findNextEligiblePlayer(
+                    dealerIndex
+                )
+            }
+
+        // ========================================================
+        // BLINDS
+        // ========================================================
+
+        /*
+         * Heads-up:
+         *
+         * Dealer = Small Blind
+         * Other player = Big Blind
+         */
+        if (eligiblePlayers.size == 2) {
+
+            smallBlindIndex =
+                dealerIndex
+
+            bigBlindIndex =
+                findNextEligiblePlayer(
+                    dealerIndex
+                )
+
+        } else {
+
+            /*
+             * Normal table:
+             *
+             * Dealer
+             *   ↓
+             * Small Blind
+             *   ↓
+             * Big Blind
+             */
+
+            smallBlindIndex =
+                findNextEligiblePlayer(
+                    dealerIndex
+                )
+
+            bigBlindIndex =
+                findNextEligiblePlayer(
+                    smallBlindIndex
+                )
+        }
+
+        // ========================================================
+        // DEAL TWO CARDS
+        // ========================================================
 
         repeat(2) {
 
             players.forEach { player ->
 
-                if (player.chips > 0) {
+                if (
+                    !player.folded &&
+                    player.chips > 0
+                ) {
 
                     player.receiveCard(
                         deck.draw()
@@ -98,58 +203,98 @@ class PokerGame(
             }
         }
 
+        // ========================================================
+        // POST SMALL BLIND
+        // ========================================================
 
-        /*
-         * Small blind.
-         */
+        postBlind(
+            smallBlindIndex,
+            smallBlind
+        )
 
-        val sb =
-            minOf(
-                smallBlind,
-                players[0].chips
-            )
+        // ========================================================
+        // POST BIG BLIND
+        // ========================================================
 
-        if (sb > 0) {
+        postBlind(
+            bigBlindIndex,
+            bigBlind
+        )
 
-            pot += players[0].bet(sb)
-        }
-
-
-        /*
-         * Big blind.
-         */
-
-        val bb =
-            minOf(
-                bigBlind,
-                players[1].chips
-            )
-
-        if (bb > 0) {
-
-            pot += players[1].bet(bb)
-        }
-
-
-        /*
-         * Pre-flop turn.
-         */
+        // ========================================================
+        // PRE-FLOP TURN
+        // ========================================================
 
         currentPlayerIndex =
-            if (players.size == 2) {
+            if (eligiblePlayers.size == 2) {
 
-                0
+                /*
+                 * Heads-up:
+                 * Big Blind acts first pre-flop.
+                 */
+                bigBlindIndex
 
             } else {
 
-                findNextAvailablePlayer(1)
+                /*
+                 * Normal table:
+                 * First player after Big Blind.
+                 */
+                findNextAvailablePlayer(
+                    bigBlindIndex
+                )
             }
+
+        /*
+         * If the player selected is already all-in
+         * because of a short blind, skip them.
+         */
+        if (!canPlayerAct(currentPlayerIndex)) {
+
+            currentPlayerIndex =
+                findNextAvailablePlayer(
+                    currentPlayerIndex
+                )
+        }
     }
 
+    // ============================================================
+    // POST BLIND
+    // ============================================================
 
-    /* ============================================================
-       HUMAN FOLD
-       ============================================================ */
+    private fun postBlind(
+        playerIndex: Int,
+        amount: Int
+    ) {
+
+        if (playerIndex !in players.indices) {
+            return
+        }
+
+        val player =
+            players[playerIndex]
+
+        if (
+            player.chips <= 0 ||
+            player.folded
+        ) {
+            return
+        }
+
+        val paid =
+            player.bet(
+                minOf(
+                    amount,
+                    player.chips
+                )
+            )
+
+        pot += paid
+    }
+
+    // ============================================================
+    // HUMAN FOLD
+    // ============================================================
 
     fun playerFold(
         id: Int
@@ -166,10 +311,9 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       HUMAN CHECK
-       ============================================================ */
+    // ============================================================
+    // HUMAN CHECK
+    // ============================================================
 
     fun playerCheck(
         id: Int
@@ -188,10 +332,9 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       HUMAN CALL
-       ============================================================ */
+    // ============================================================
+    // HUMAN CALL
+    // ============================================================
 
     fun playerCall(
         id: Int
@@ -231,10 +374,9 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       HUMAN RAISE
-       ============================================================ */
+    // ============================================================
+    // HUMAN RAISE
+    // ============================================================
 
     fun playerRaise(
         playerId: Int,
@@ -276,7 +418,8 @@ class PokerGame(
         pot += paid
 
         /*
-         * Everybody must respond to the raise.
+         * A new raise means all other players
+         * have to respond again.
          */
         actedPlayers.clear()
 
@@ -285,10 +428,9 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       HUMAN ALL IN
-       ============================================================ */
+    // ============================================================
+    // HUMAN ALL-IN
+    // ============================================================
 
     fun playerAllIn(
         id: Int
@@ -305,14 +447,16 @@ class PokerGame(
             return
         }
 
-        val amount =
-            player.chips
-
         val paid =
-            player.bet(amount)
+            player.bet(
+                player.chips
+            )
 
         pot += paid
 
+        /*
+         * Reset responses.
+         */
         actedPlayers.clear()
 
         actedPlayers.add(id)
@@ -320,16 +464,19 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       CAN CHECK
-       ============================================================ */
+    // ============================================================
+    // CAN CHECK
+    // ============================================================
 
     fun canCheck(
         id: Int
     ): Boolean {
 
         if (id !in players.indices) {
+            return false
+        }
+
+        if (!isHumanTurn(id)) {
             return false
         }
 
@@ -340,10 +487,9 @@ class PokerGame(
                 highestCurrentBet()
     }
 
-
-    /* ============================================================
-       AI TURN LOOP
-       ============================================================ */
+    // ============================================================
+    // COMPUTER TURNS
+    // ============================================================
 
     fun processComputerTurns() {
 
@@ -364,7 +510,6 @@ class PokerGame(
             /*
              * Skip players who cannot act.
              */
-
             if (
                 player.folded ||
                 player.allIn ||
@@ -386,10 +531,9 @@ class PokerGame(
         }
     }
 
-
-    /* ============================================================
-       AI DECISION
-       ============================================================ */
+    // ============================================================
+    // AI DECISION
+    // ============================================================
 
     private fun computerAction(
         id: Int
@@ -415,7 +559,7 @@ class PokerGame(
                         aiFold(id)
                     }
 
-                    canCheck(id) -> {
+                    canCheckForAi(id) -> {
 
                         aiCheck(id)
                     }
@@ -433,7 +577,6 @@ class PokerGame(
                 }
             }
 
-
             Difficulty.MEDIUM -> {
 
                 when {
@@ -450,7 +593,7 @@ class PokerGame(
                         aiRaise(id)
                     }
 
-                    canCheck(id) -> {
+                    canCheckForAi(id) -> {
 
                         aiCheck(id)
                     }
@@ -461,7 +604,6 @@ class PokerGame(
                     }
                 }
             }
-
 
             Difficulty.HARD -> {
 
@@ -479,7 +621,7 @@ class PokerGame(
                         aiRaise(id)
                     }
 
-                    canCheck(id) -> {
+                    canCheckForAi(id) -> {
 
                         aiCheck(id)
                     }
@@ -493,10 +635,21 @@ class PokerGame(
         }
     }
 
+    // ============================================================
+    // AI CHECK
+    // ============================================================
 
-    /* ============================================================
-       AI CHECK
-       ============================================================ */
+    private fun canCheckForAi(
+        id: Int
+    ): Boolean {
+
+        if (id !in players.indices) {
+            return false
+        }
+
+        return players[id].currentBet ==
+                highestCurrentBet()
+    }
 
     private fun aiCheck(
         id: Int
@@ -507,10 +660,9 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       AI CALL
-       ============================================================ */
+    // ============================================================
+    // AI CALL
+    // ============================================================
 
     private fun aiCall(
         id: Int
@@ -546,10 +698,9 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       AI RAISE
-       ============================================================ */
+    // ============================================================
+    // AI RAISE
+    // ============================================================
 
     private fun aiRaise(
         id: Int
@@ -604,9 +755,8 @@ class PokerGame(
         }
 
         /*
-         * New raise resets responses.
+         * New raise.
          */
-
         actedPlayers.clear()
 
         actedPlayers.add(id)
@@ -614,10 +764,9 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       AI FOLD
-       ============================================================ */
+    // ============================================================
+    // AI FOLD
+    // ============================================================
 
     private fun aiFold(
         id: Int
@@ -630,17 +779,15 @@ class PokerGame(
         afterAction()
     }
 
-
-    /* ============================================================
-       AFTER ACTION
-       ============================================================ */
+    // ============================================================
+    // AFTER ACTION
+    // ============================================================
 
     private fun afterAction() {
 
         /*
-         * One player remaining.
+         * Only one player remains.
          */
-
         if (activePlayers().size <= 1) {
 
             finishByFold()
@@ -648,11 +795,9 @@ class PokerGame(
             return
         }
 
-
         /*
-         * Everybody all-in.
+         * Everyone is all-in.
          */
-
         if (allActivePlayersAllIn()) {
 
             runToShowdown()
@@ -660,11 +805,9 @@ class PokerGame(
             return
         }
 
-
         /*
          * Betting round finished.
          */
-
         if (roundComplete()) {
 
             advanceStage()
@@ -672,18 +815,15 @@ class PokerGame(
             return
         }
 
-
         /*
-         * Continue.
+         * Continue to next player.
          */
-
         moveToNextPlayer()
     }
 
-
-    /* ============================================================
-       MOVE TO NEXT PLAYER
-       ============================================================ */
+    // ============================================================
+    // MOVE TO NEXT PLAYER
+    // ============================================================
 
     private fun moveToNextPlayer() {
 
@@ -699,40 +839,22 @@ class PokerGame(
             return
         }
 
-        currentPlayerIndex = next
+        currentPlayerIndex =
+            next
     }
 
-
-    /* ============================================================
-       NEXT PLAYER
-       ============================================================ */
+    // ============================================================
+    // FIND NEXT AVAILABLE PLAYER
+    // ============================================================
 
     private fun findNextAvailablePlayer(
         from: Int
     ): Int {
 
-        for (offset in 1..players.size) {
-
-            val index =
-                (from + offset) %
-                        players.size
-
-            val player =
-                players[index]
-
-            if (
-                !player.folded &&
-                !player.allIn &&
-                player.chips >= 0
-            ) {
-
-                return index
-            }
-        }
-
-        return 0
+        return findNextAvailablePlayerOrNull(
+            from
+        ) ?: firstPlayerWhoCanAct()
     }
-
 
     private fun findNextAvailablePlayerOrNull(
         from: Int
@@ -744,26 +866,66 @@ class PokerGame(
                 (from + offset) %
                         players.size
 
-            val player =
-                players[index]
+            if (canPlayerAct(index)) {
 
-            if (
-                !player.folded &&
-                !player.allIn &&
-                player.chips >= 0
-            ) {
-
-                return index
+                return players[index].id
             }
         }
 
         return null
     }
 
+    private fun canPlayerAct(
+        index: Int
+    ): Boolean {
 
-    /* ============================================================
-       ROUND COMPLETE
-       ============================================================ */
+        if (index !in players.indices) {
+            return false
+        }
+
+        val player =
+            players[index]
+
+        return !player.folded &&
+                !player.allIn &&
+                player.chips > 0
+    }
+
+    private fun firstPlayerWhoCanAct(): Int {
+
+        return players
+            .firstOrNull {
+                canPlayerAct(it.id)
+            }
+            ?.id ?: 0
+    }
+
+    // ============================================================
+    // DEALER ROTATION
+    // ============================================================
+
+    private fun findNextEligiblePlayer(
+        from: Int
+    ): Int {
+
+        for (offset in 1..players.size) {
+
+            val index =
+                (from + offset) %
+                        players.size
+
+            if (players[index].chips > 0) {
+
+                return index
+            }
+        }
+
+        return from
+    }
+
+    // ============================================================
+    // ROUND COMPLETE
+    // ============================================================
 
     private fun roundComplete(): Boolean {
 
@@ -773,7 +935,7 @@ class PokerGame(
         val playersWhoCanAct =
             active.filter {
                 !it.allIn &&
-                        it.chips >= 0
+                        it.chips > 0
             }
 
         if (playersWhoCanAct.isEmpty()) {
@@ -803,19 +965,17 @@ class PokerGame(
         return true
     }
 
-
-    /* ============================================================
-       ADVANCE STREET
-       ============================================================ */
+    // ============================================================
+    // ADVANCE STREET
+    // ============================================================
 
     private fun advanceStage() {
 
         actedPlayers.clear()
 
         /*
-         * Reset betting for the new street.
+         * Reset street betting.
          */
-
         players.forEach {
             it.currentBet = 0
         }
@@ -834,7 +994,6 @@ class PokerGame(
                     GameStage.FLOP
             }
 
-
             GameStage.FLOP -> {
 
                 burnCard()
@@ -846,7 +1005,6 @@ class PokerGame(
                 stage =
                     GameStage.TURN
             }
-
 
             GameStage.TURN -> {
 
@@ -860,7 +1018,6 @@ class PokerGame(
                     GameStage.RIVER
             }
 
-
             GameStage.RIVER -> {
 
                 showdown()
@@ -868,68 +1025,68 @@ class PokerGame(
                 return
             }
 
-
             else -> {
+
                 return
             }
         }
 
         /*
-         * Post-flop starts with first active player.
+         * Post-flop:
+         * First active player after dealer.
          */
-
         currentPlayerIndex =
-            findFirstActivePlayer()
+            findFirstActivePlayerAfterDealer()
 
         /*
          * If everyone is all-in,
-         * automatically go to showdown.
+         * go directly to showdown.
          */
-
         if (allActivePlayersAllIn()) {
 
             runToShowdown()
         }
     }
 
+    // ============================================================
+    // FIRST PLAYER AFTER DEALER
+    // ============================================================
 
-    /* ============================================================
-       FIRST ACTIVE PLAYER
-       ============================================================ */
+    private fun findFirstActivePlayerAfterDealer(): Int {
 
-    private fun findFirstActivePlayer(): Int {
+        for (offset in 1..players.size) {
 
-        for (player in players) {
+            val index =
+                (dealerIndex + offset) %
+                        players.size
 
-            if (
-                !player.folded &&
-                !player.allIn &&
-                player.chips >= 0
-            ) {
+            if (canPlayerAct(index)) {
 
-                return player.id
+                return index
             }
         }
 
-        return 0
+        return dealerIndex.coerceIn(
+            0,
+            players.lastIndex
+        )
     }
 
-
-    /* ============================================================
-       BURN CARD
-       ============================================================ */
+    // ============================================================
+    // BURN CARD
+    // ============================================================
 
     private fun burnCard() {
 
         if (deck.cardsRemaining() > 0) {
+
             deck.draw()
         }
     }
 
-
-    /* ============================================================
-       AUTOMATIC SHOWDOWN
-       ============================================================ */
+    // ============================================================
+    // AUTOMATIC SHOWDOWN
+    // ============================================================
 
     private fun runToShowdown() {
 
@@ -969,6 +1126,7 @@ class PokerGame(
                 }
 
                 else -> {
+
                     break
                 }
             }
@@ -977,10 +1135,9 @@ class PokerGame(
         showdown()
     }
 
-
-    /* ============================================================
-       SHOWDOWN
-       ============================================================ */
+    // ============================================================
+    // SHOWDOWN
+    // ============================================================
 
     fun showdown() {
 
@@ -1006,11 +1163,9 @@ class PokerGame(
             return
         }
 
-
         /*
-         * Only one player.
+         * Only one player remains.
          */
-
         if (active.size == 1) {
 
             val winner =
@@ -1032,10 +1187,9 @@ class PokerGame(
             return
         }
 
-
-        /*
-         * Find best hand.
-         */
+        // ========================================================
+        // FIND BEST HAND
+        // ========================================================
 
         var bestHand =
             evaluatePlayer(
@@ -1056,14 +1210,14 @@ class PokerGame(
                 ) > 0
             ) {
 
-                bestHand = hand
+                bestHand =
+                    hand
             }
         }
 
-
-        /*
-         * Find all winners.
-         */
+        // ========================================================
+        // FIND WINNERS
+        // ========================================================
 
         val winners =
             active.filter { player ->
@@ -1074,17 +1228,15 @@ class PokerGame(
                 ) == 0
             }
 
+        // ========================================================
+        // SPLIT POT
+        // ========================================================
 
         val share =
             pot / winners.size
 
         val remainder =
             pot % winners.size
-
-
-        /*
-         * Distribute pot.
-         */
 
         winners.forEachIndexed {
                 index,
@@ -1093,16 +1245,15 @@ class PokerGame(
             player.chips += share
 
             if (index == 0) {
+
                 player.chips += remainder
             }
         }
-
 
         val names =
             winners.joinToString(", ") {
                 it.name
             }
-
 
         lastResult =
             if (winners.size == 1) {
@@ -1120,10 +1271,9 @@ class PokerGame(
             GameStage.FINISHED
     }
 
-
-    /* ============================================================
-       EVALUATE
-       ============================================================ */
+    // ============================================================
+    // EVALUATE PLAYER
+    // ============================================================
 
     private fun evaluatePlayer(
         player: Player
@@ -1135,10 +1285,9 @@ class PokerGame(
         )
     }
 
-
-    /* ============================================================
-       FOLD WINNER
-       ============================================================ */
+    // ============================================================
+    // FOLD WINNER
+    // ============================================================
 
     private fun finishByFold() {
 
@@ -1167,10 +1316,9 @@ class PokerGame(
             GameStage.FINISHED
     }
 
-
-    /* ============================================================
-       ACTIVE PLAYERS
-       ============================================================ */
+    // ============================================================
+    // ACTIVE PLAYERS
+    // ============================================================
 
     private fun activePlayers(): List<Player> {
 
@@ -1179,10 +1327,14 @@ class PokerGame(
         }
     }
 
+    fun getActivePlayers(): List<Player> {
 
-    /* ============================================================
-       ALL-IN CHECK
-       ============================================================ */
+        return activePlayers()
+    }
+
+    // ============================================================
+    // ALL-IN CHECK
+    // ============================================================
 
     private fun allActivePlayersAllIn(): Boolean {
 
@@ -1190,6 +1342,7 @@ class PokerGame(
             activePlayers()
 
         if (active.size <= 1) {
+
             return false
         }
 
@@ -1198,10 +1351,9 @@ class PokerGame(
         }
     }
 
-
-    /* ============================================================
-       HIGHEST BET
-       ============================================================ */
+    // ============================================================
+    // HIGHEST BET
+    // ============================================================
 
     private fun highestCurrentBet(): Int {
 
@@ -1210,10 +1362,9 @@ class PokerGame(
         } ?: 0
     }
 
-
-    /* ============================================================
-       HUMAN TURN
-       ============================================================ */
+    // ============================================================
+    // HUMAN TURN
+    // ============================================================
 
     private fun isHumanTurn(
         id: Int
@@ -1223,9 +1374,7 @@ class PokerGame(
             return false
         }
 
-        if (
-            id !in players.indices
-        ) {
+        if (id !in players.indices) {
             return false
         }
 
@@ -1233,12 +1382,14 @@ class PokerGame(
             stage == GameStage.SHOWDOWN ||
             stage == GameStage.FINISHED
         ) {
+
             return false
         }
 
         if (
             currentPlayerIndex != 0
         ) {
+
             return false
         }
 
@@ -1250,16 +1401,16 @@ class PokerGame(
             player.allIn ||
             player.chips <= 0
         ) {
+
             return false
         }
 
         return true
     }
 
-
-    /* ============================================================
-       AI STRENGTH
-       ============================================================ */
+    // ============================================================
+    // AI STRENGTH
+    // ============================================================
 
     private fun calculateAiStrength(
         player: Player
@@ -1268,10 +1419,10 @@ class PokerGame(
         /*
          * PRE-FLOP
          */
-
         if (communityCards.size < 3) {
 
             if (player.hand.size < 2) {
+
                 return 20
             }
 
@@ -1287,15 +1438,14 @@ class PokerGame(
             /*
              * Pair.
              */
-
             if (first == second) {
+
                 strength += 35
             }
 
             /*
              * Same suit.
              */
-
             if (
                 player.hand[0].suit ==
                 player.hand[1].suit
@@ -1307,7 +1457,6 @@ class PokerGame(
             /*
              * Connected cards.
              */
-
             if (
                 abs(first - second) <= 2
             ) {
@@ -1321,11 +1470,9 @@ class PokerGame(
             )
         }
 
-
         /*
          * POST-FLOP
          */
-
         return try {
 
             val hand =
@@ -1370,21 +1517,15 @@ class PokerGame(
         }
     }
 
-
-    /* ============================================================
-       PUBLIC METHODS
-       ============================================================ */
+    // ============================================================
+    // PUBLIC METHODS FOR UI
+    // ============================================================
 
     fun getCurrentPlayer(): Player {
 
         return players[
             currentPlayerIndex
         ]
-    }
-
-    fun getActivePlayers(): List<Player> {
-
-        return activePlayers()
     }
 
     fun getPlayerHand(
@@ -1394,12 +1535,14 @@ class PokerGame(
         if (
             id !in players.indices
         ) {
+
             return null
         }
 
         if (
             communityCards.size < 3
         ) {
+
             return null
         }
 
